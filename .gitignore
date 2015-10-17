@@ -1,4 +1,5 @@
 *.schema
 *.data
+*.temp
 *.in
 *.out
