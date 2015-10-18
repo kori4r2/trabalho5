@@ -176,7 +176,9 @@ void save_item(FILE *fp_data, SCHEMA *schema, int id){
 			// Funcao de my_strings.h
 			copy_sized_string_input(stdin, aux, node->size);
 		}else if(node->id == BYTE_T){
+			free(aux);
 			aux = (void*)read_image(n_rows, n_cols);
+			aux = realloc(aux , node->size);
 		}
 
 		fwrite(aux, node->size, 1, fp_data);
@@ -189,7 +191,7 @@ void save_item(FILE *fp_data, SCHEMA *schema, int id){
 void get_item(char **item, SCHEMA *schema, int cur_pos, int*n_elements){
 
 	int aux_int, i;
-	unsigned char *aux_byte;
+	unsigned char *aux_byte = NULL;
 	double aux_double;
 	FILE *fp_data = open_data(schema, "rb", n_elements);
 	NODE *node = schema->sentry;
@@ -213,8 +215,10 @@ void get_item(char **item, SCHEMA *schema, int cur_pos, int*n_elements){
 			fread(&aux_double, node->size, 1, fp_data);
 			snprintf(item[i], LENGTH_ITEMS-1, "%.2lf", aux_double);
 		}else if(node->id == BYTE_T){
-			fread(&aux_byte, node->size, 1, fp_data);
+			aux_byte = (unsigned char*)malloc(sizeof(unsigned char) * 5);
+			fread(aux_byte, node->size, 1, fp_data);
 			print_byte(aux_byte, atoi(item[1]), atoi(item[2]), item[i]);
+			free(aux_byte);
 		}
 	}
 	fclose(fp_data);
