@@ -3,3 +3,5 @@
 *.temp
 *.in
 *.out
+*.in~
+*.out~

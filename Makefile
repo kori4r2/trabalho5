@@ -7,7 +7,6 @@ all: aux main
 aux:
 	gcc $(CFLAGS) -c schema.c
 	gcc $(CFLAGS) -c my_strings.c
-	gcc $(CFLAGS) -c array_list.c
 
 main:
 	gcc $(CFLAGS) -c main.c

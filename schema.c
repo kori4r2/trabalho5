@@ -71,6 +71,10 @@ void get_node(NODE *node, char *line){
 		aux = strtok(NULL, DELIMITERS);
 		// O numero de caracteres fica salvo no tamanho do elemento, pois sempre um produto do tamanho por sizeof(char)
 		node->size = atoi(aux) * sizeof(char);
+	}else if(strcmp(aux, STR_BYTE) == 0){
+		node->id = BYTE_T;
+		aux = strtok(NULL, DELIMITERS);
+		node->size = atoi(aux) * sizeof(unsigned char);
 	}
 /*
 	// Mais uma chamada de strtok analisa se o elemento deve ser ordernado ou nao
@@ -427,6 +431,11 @@ char **read_schema(int *n_elements){
 
 	// Le o nome do arquivo a ser aberto para leitura da stdin
 	filename = my_get_line_valid(stdin, &ending);
+	// Se for passado a palavra none, sai da funcao com retorno NULL
+	if(strcmp(filename, "none") == 0){
+		free(filename);
+		return NULL;
+	}
 	fp = fopen(filename, "r");
 	// Checa se foi aberto de maneira correta
 	if(fp == NULL){
@@ -461,7 +470,7 @@ char **read_schema(int *n_elements){
 	return table;
 }
 
-void get_schema(SCHEMA *schema){
+SCHEMA* get_schema(SCHEMA *schema){
 	// Verifica se o schema foi criado adequadamente
 	if(schema != NULL){
 		// Caso tenha sido, usa a funcao read_schema para ler as linhas do arquivo .schema indicado pela stdin e armazena quantos elementos
@@ -471,6 +480,11 @@ void get_schema(SCHEMA *schema){
 		long int offset;
 		char *aux;
 		char **table = read_schema(&n_elements);
+
+		if(table == NULL){
+			delete_schema(&schema);
+			return schema;
+		}
 
 		// A primeira linha é analizada para obter-se o nome do arquivo e o numero de elementos lido é armazenado
 		aux = strtok(table[0], DELIMITERS);
@@ -542,7 +556,9 @@ void get_schema(SCHEMA *schema){
 		// Cria os arquivos index necessarios de acordo com o .schema e o .data
 //		get_index(schema);
 //		sort_index(schema);
+		return schema;
 	}
+	return NULL;
 }
 
 void delete_schema(SCHEMA **schema){
@@ -584,7 +600,9 @@ void dump_schema(SCHEMA *schema){
 			}else if(node->id == DOUBLE_T){
 				printf("%s %s", node->name, STR_DOUBLE);
 			}else if(node->id == STRING_T){
-				printf("%s %s[%ld]", node->name, STR_CHAR, (node->size/(int)sizeof(char)));
+				printf("%s %s[%ld]", node->name, STR_CHAR, (node->size/sizeof(char)));
+			}else if(node->id == BYTE_T){
+				printf("%s %s[%ld]", node->name, STR_BYTE, (node->size/sizeof(unsigned char)));
 			}
 /*
 			// Analisa se é necessario imprimir order e depois imprime o tamanho do elemento em bytes
@@ -1148,4 +1166,53 @@ void get_class(SCHEMA *schema, int n){
 	fclose(fp_temp);
 	fclose(fp_data);
 	fclose(fp_index);
+}
+
+unsigned char *read_image(int n_rows, int n_cols){
+	if(n_rows > 0 && n_cols > 0){
+		unsigned char input, aux, *image;
+		int i = 0, j = 0;
+
+		// Loop para evitar que leia lixo da entrada
+		while((input = fgetc(stdin)) != EOF && (input < '0' || input > '1'));
+		// Caso seja atingido o EOF durante a procura, sai do programa com mensagem de erro correspondente
+		if(input == EOF){
+			fprintf(stderr, "error reading image\n");
+			exit(6);
+		}
+
+		// Aloca a memoria necessaria para armazenar a imagem
+		image = (unsigned char*)malloc(sizeof(unsigned char) * ((n_rows*n_cols/8) + 1) );
+		do{
+			if(i%8 == 0){
+				aux = (unsigned char)pow(2, 7);
+				image[j] = 0;
+			}
+			else aux /= 2;
+			// Guarda o ultimo numero lido
+			image[j] += (input-'0') * aux;
+			i++;
+			if(i%8 == 0) j++;
+		// Le o proximo numero ate encontrar final do arquivo ou ate preencher o vetor
+		}while((input = fgetc(stdin)) != EOF && i < (n_rows * n_cols));
+	
+		return image;
+	}
+	return NULL;
+}
+
+int hamming_distance(unsigned char *imageA, unsigned char *imageB, int n_rows, int n_cols){
+	if(imageA != NULL && imageB != NULL && n_rows > 0 && n_cols > 0){
+		int i, j, distance = 0;
+		unsigned char aux;
+		for(i = 0; i <= (n_rows*n_cols)/8; i++){
+			aux = (unsigned char)pow(2, 7);
+			for(j = 0; j < 8 && ((i*8)+j < n_rows*n_cols); j++){
+				if((aux & imageA[i]) != (aux & imageB[i])) distance++;
+				aux /= 2;
+			}
+		}
+		return distance;
+	}
+	return -1;
 }

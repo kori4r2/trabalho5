@@ -64,7 +64,7 @@ char *my_get_line_valid(FILE *stream, int *ending){
 	// Procura o primeiro caracter valido para comecar a leitura da string
 	do{
 		input = fgetc(stream);
-	}while((char)input != '\n' && input != EOF && !isprint(input));
+	}while(!isprint(input) && (char)input != '\n' && input != EOF);
 
 	if(input == EOF){   // Chamada da função em local invalido do arquivo:
 //		if(input == '\n') (*ending) = 1;       // -linha vazia  OBS: Essa checagem precisou ser removida para evitar erros

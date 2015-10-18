@@ -1,10 +1,14 @@
 /*
 		Trabalho 4: K-Nearest Neighbors (KNN)
+		Trabalho 5: Optical Character Recognition (OCR)
 
-			Italo Tobler Silva - nUSP 8551910		?-4/10/2015
+			Italo Tobler Silva - nUSP 8551910		18/10/2015
 
 	OBS1: Recomendável para a leitura do codigo manter aberto uma copia dos defines e dos conteudos das structs
 	para facilitar consulta
+	OBS2: As funcoes referentes ao trabalho 5 encontram-se no final do codigo. As funcoes anteriores de criacao
+	e leitura do schema (get_schema() e read_schema()) tiveram que ser alteradas para acomodar a possibilidade
+	de ser passado 'none' no lugar do nome do arquivo
 
 */
 #ifndef _SCHEMA
@@ -23,16 +27,18 @@
 #define INT_T 0
 #define STRING_T 1
 #define DOUBLE_T 2
+#define BYTE_T 3
 
 /*
 	Essas strings sao definidas para o caso do usuario desejar mudar o identificador dos tipos de dado ou do nome dos arquivos
-   ou do indicador de ordenacao. A string DELIMITERS é foi criada para o uso da função strtok
+   ou do indicador de ordenacao. A string DELIMITERS é foi criada para o uso da função strtok na leitura do .schema
 */
 #define STR_TABLE "table"
 #define STR_ORDER "order"
 #define STR_CHAR "char"
 #define STR_INT "int"
 #define STR_DOUBLE "double"
+#define STR_BYTE "byte"
 #define DELIMITERS " []\t"
 
 /*
@@ -54,13 +60,14 @@ SCHEMA *create_schema(void);
 /*------------------------------------------------------------------------------------------------------------
    get_schema()
         Funcao que le o nome do arquivo .schema da stdin, abre-o para leitura e interpreta seu conteudo para
-	preencher o schema
+	preencher o schema. Caso seja lido o "none" no lugar do nome do arquivo, o schema passado e apagado e
+	setado para NULL
         - Parametros
           SCHEMA* : schema a ser preenchido
         - Retorno
-          void
+          SCHEMA* : o mesmo schema apos leitura; NULL caso erro ou caso "none" inserido na leitura;
 */
-void get_schema(SCHEMA*);
+SCHEMA* get_schema(SCHEMA*);
 
 /*------------------------------------------------------------------------------------------------------------
    dump_schema()
@@ -200,5 +207,9 @@ void dump_nn(SCHEMA*, int);
           void
 */
 void get_class(SCHEMA*, int);
+
+unsigned char *read_image(int, int);
+
+int hamming_distance(unsigned char*, unsigned char*, int, int);
 
 #endif
