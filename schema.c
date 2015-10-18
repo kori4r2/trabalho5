@@ -154,7 +154,7 @@ FILE *open_temp(SCHEMA *schema, char *mode){
 
 // Recebe as informações de um elemento da stdin e salva em fp_data com dist == 0.0
 void save_item(FILE *fp_data, SCHEMA *schema, int id){
-	int i;
+	int i, n_rows, n_cols;
 	void *aux;
 	NODE *node = schema->sentry->next;
 	double dist = 0.0;
@@ -168,11 +168,15 @@ void save_item(FILE *fp_data, SCHEMA *schema, int id){
 
 		if(node->id == INT_T){
 			scanf("%d", (int*)(aux));
+			if(strcmp(node->name, "nrows") == 0) n_rows = *((int*)aux);
+			else if(strcmp(node->name, "ncols") == 0) n_cols = *((int*)aux);
 		}else if(node->id == DOUBLE_T){
 			scanf("%lf", (double*)(aux));
 		}else if(node->id == STRING_T){
 			// Funcao de my_strings.h
 			copy_sized_string_input(stdin, aux, node->size);
+		}else if(node->id == BYTE_T){
+			aux = (void*)read_image(n_rows, n_cols);
 		}
 
 		fwrite(aux, node->size, 1, fp_data);
@@ -185,6 +189,7 @@ void save_item(FILE *fp_data, SCHEMA *schema, int id){
 void get_item(char **item, SCHEMA *schema, int cur_pos, int*n_elements){
 
 	int aux_int, i;
+	unsigned char *aux_byte;
 	double aux_double;
 	FILE *fp_data = open_data(schema, "rb", n_elements);
 	NODE *node = schema->sentry;
@@ -207,6 +212,9 @@ void get_item(char **item, SCHEMA *schema, int cur_pos, int*n_elements){
 			// Para elementos do tipo double o procedimento eh semelhante ao de inteiros
 			fread(&aux_double, node->size, 1, fp_data);
 			snprintf(item[i], LENGTH_ITEMS-1, "%.2lf", aux_double);
+		}else if(node->id == BYTE_T){
+			fread(&aux_byte, node->size, 1, fp_data);
+			print_byte(aux_byte, atoi(item[1]), atoi(item[2]), item[i]);
 		}
 	}
 	fclose(fp_data);
@@ -273,7 +281,7 @@ int compare_in_file(FILE *fp, NODE *node, int i, int j){
 		else if( (*((double*)aux1)) > (*((double*)aux2)) ) result = 1;
 	}else if(node->id == STRING_T){
 		result = strcmp((char*)aux1, (char*)aux2);
-	}
+	}else result = 0;
 	// Independente do tipo, o resultado é semelhante em quesito de ordenacao ao retorno da funcao strcmp()
 	// negativo quer dizer i e j estão crescentes, positivo decrescente e 0 igual
 
@@ -297,7 +305,7 @@ int compare_outside(NODE *node, void *check, char *key){
 		else if( (*((double*)check)) < atof(key) ) result = 1;
 	}else if(node->id == STRING_T){
 		result = strcmp(key, (char*)check);
-	}
+	}else result = 0;
 	// O retorno da funcao se da de maneira semelhante a compare_inside_file()
 
 	return result;
@@ -639,6 +647,8 @@ void dump_data(SCHEMA *schema){
 			item[i] = (char*)malloc(LENGTH_ITEMS * sizeof(char));
 		}else if(node->id == STRING_T){
 			item[i] = (char*)malloc(node->size);
+		}else if(node->id == BYTE_T){
+			item[i] = (char*)malloc(node->size * 8);
 		}
 	}
 
@@ -971,6 +981,8 @@ void dump_nn(SCHEMA *schema, int number){
 			item[i] = (char*)malloc(LENGTH_ITEMS * sizeof(char));
 		}else if(node->id == STRING_T){
 			item[i] = (char*)malloc(node->size);
+		}else if(node->id == BYTE_T){
+			item[i] = (char*)malloc(node->size * 8);
 		}
 	}
 
@@ -1168,6 +1180,22 @@ void get_class(SCHEMA *schema, int n){
 	fclose(fp_index);
 }
 
+int print_byte(unsigned char *bytes, int rows, int cols, char *string){
+	if(bytes != NULL && rows > 0 && cols > 0 && string != NULL){
+		int i, j;
+		unsigned char aux;
+
+		for(i = 0; i <= (rows*cols)/8; i++){
+			aux = (unsigned char)pow(2, 7);
+			for(j = 0; j < 8 && ((i*8)+j < rows*cols); j++){
+				sprintf(string+((i*8)+j), "%hhu", (aux & bytes[i])/aux);
+				aux /= 2;
+			}
+		}
+	}
+	return 1;
+}
+
 unsigned char *read_image(int n_rows, int n_cols){
 	if(n_rows > 0 && n_cols > 0){
 		unsigned char input, aux, *image;
@@ -1215,4 +1243,55 @@ int hamming_distance(unsigned char *imageA, unsigned char *imageB, int n_rows, i
 		return distance;
 	}
 	return -1;
+}
+
+unsigned char **bits_to_matrix(unsigned char *bytes, int n_rows, int n_cols){
+	if(bytes != NULL && n_rows > 0 && n_cols > 0){
+		int i, j, k;
+		unsigned char aux, **matrix;
+
+		matrix = (unsigned char**)malloc(sizeof(unsigned char*) * n_rows);
+		if(matrix == NULL) return NULL;
+		for(i = 0; i < n_rows; i++){
+			matrix[i] = (unsigned char*)malloc(sizeof(unsigned char) * n_cols);
+			if(matrix[i] == NULL){
+				for(j = i-1; j >= 0; j--){
+					free(matrix[j]);
+					matrix[j] = NULL;
+				}
+				free(matrix);
+				return NULL;
+			}
+		}
+
+		k = 0;
+		for(i = 0; i <= (n_rows*n_cols)/8; i++){
+			aux = (unsigned char)pow(2, 7);
+			for(j = 0; j < 8 && ((i*8)+j < n_rows*n_cols); j++){
+				matrix[k / n_cols][k % n_cols] = aux & bytes[i];
+				aux /= 2;
+			}
+		}
+
+		return matrix;
+	}
+	return NULL;
+}
+
+int erode(unsigned char *image, int n_rows, int n_cols, unsigned char *mask, int mask_rows, int mask_cols){
+	if(image != NULL && n_rows > 0 && n_cols > 0 && mask != NULL && mask_rows > 0 && mask_cols > 0){
+		
+
+		return 0;
+	}
+	return 1;
+}
+
+int dilate(unsigned char *image, int n_rows, int n_cols, unsigned char *mask, int mask_rows, int mask_cols){
+	if(image != NULL && n_rows > 0 && n_cols > 0 && mask != NULL && mask_rows > 0 && mask_cols > 0){
+		
+
+		return 0;
+	}
+	return 1;
 }

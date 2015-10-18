@@ -210,6 +210,12 @@ void get_class(SCHEMA*, int);
 
 unsigned char *read_image(int, int);
 
+int print_byte(unsigned char*, int, int, char*);
+
 int hamming_distance(unsigned char*, unsigned char*, int, int);
+
+int erode(unsigned char*, int, int, unsigned char*, int, int);
+
+int dilate(unsigned char*, int, int, unsigned char*, int, int);
 
 #endif
