@@ -1293,6 +1293,7 @@ int print_byte(unsigned char *bytes, int rows, int cols, char *string){
 				aux /= 2;
 			}
 		}
+		return 0;
 	}
 	return 1;
 }
@@ -1419,6 +1420,7 @@ int print_matrix(unsigned char **matrix, int rows, int cols){
 			}
 			printf("%hhu\n", matrix[i][j]);
 		}
+		return 0;
 	}
 	return 1;
 }
