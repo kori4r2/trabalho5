@@ -6,7 +6,7 @@ int main(int argc, char *argv[]){
 
 	int repeat, n, n_rowsA, n_colsA, n_rowsB, n_colsB;
 	char *input = NULL;
-	unsigned char *imageA, *imageB;
+	unsigned char *imageA, *imageB, **matrixA, **matrixB, **matrixC;
 
 	// A lista schema é criada e lida da stdin
 	SCHEMA *schema = create_schema();
@@ -54,24 +54,43 @@ int main(int argc, char *argv[]){
 			imageA = read_image(n_rowsA, n_colsA);
 			scanf("%d %d", &n_rowsB, &n_colsB);
 			imageB = read_image(n_rowsB, n_colsB);
+
+			matrixA = bits_to_matrix(imageA, n_rowsA, n_colsA);
+			matrixB = bits_to_matrix(imageB, n_rowsB, n_colsB);
+			printf("im:\n");
+			print_matrix(matrixA, n_rowsA, n_colsA);
+			printf("el:\n");
+			print_matrix(matrixB, n_rowsB, n_colsB);
+
 			free(input);
 			input = my_get_line_valid(stdin, &n);
 			if(input != NULL){
+				printf("out:\n");
 				if(strcmp(input, "erode") == 0){
-					erode(imageA, n_rowsA, n_colsA, imageB, n_rowsB, n_colsB);
+					matrixC = erode(matrixA, n_rowsA, n_colsA, matrixB, n_rowsB, n_colsB);
+					print_matrix(matrixC, n_rowsA, n_colsA);
 				}else if(strcmp(input, "dilate") == 0){
-					dilate(imageA, n_rowsA, n_colsA, imageB, n_rowsB, n_colsB);
+					matrixC = dilate(matrixA, n_rowsA, n_colsA, matrixB, n_rowsB, n_colsB);
+					print_matrix(matrixC, n_rowsA, n_colsA);
 				}else if(strcmp(input, "open") == 0){
-					erode(imageA, n_rowsA, n_colsA, imageB, n_rowsB, n_colsB);
-					dilate(imageA, n_rowsA, n_colsA, imageB, n_rowsB, n_colsB);
+					matrixC = erode(matrixA, n_rowsA, n_colsA, matrixB, n_rowsB, n_colsB);
+					free_matrix(&matrixA, n_rowsA);
+					matrixA = dilate(matrixC, n_rowsA, n_colsA, matrixB, n_rowsB, n_colsB);
+					print_matrix(matrixA, n_rowsA, n_colsA);
 				}else if(strcmp(input, "close") == 0){
-					dilate(imageA, n_rowsA, n_colsA, imageB, n_rowsB, n_colsB);
-					erode(imageA, n_rowsA, n_colsA, imageB, n_rowsB, n_colsB);
+					matrixC = dilate(matrixA, n_rowsA, n_colsA, matrixB, n_rowsB, n_colsB);
+					free_matrix(&matrixA, n_rowsA);
+					matrixA = erode(matrixC, n_rowsA, n_colsA, matrixB, n_rowsB, n_colsB);
+					print_matrix(matrixA, n_rowsA, n_colsA);
 				}
 			}else{
 				fprintf(stderr, "error reading operation\n");
 				input = strdup("exit");
 			}
+
+			free_matrix(&matrixA, n_rowsA);
+			free_matrix(&matrixB, n_rowsB);
+			free_matrix(&matrixC, n_rowsA);
 			free(imageA);
 			free(imageB);
 			imageA = imageB = NULL;

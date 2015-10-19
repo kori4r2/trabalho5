@@ -214,8 +214,14 @@ int print_byte(unsigned char*, int, int, char*);
 
 int hamming_distance(unsigned char*, unsigned char*, int, int);
 
-int erode(unsigned char*, int, int, unsigned char*, int, int);
+unsigned char **bits_to_matrix(unsigned char*, int, int);
 
-int dilate(unsigned char*, int, int, unsigned char*, int, int);
+int print_matrix(unsigned char**, int, int);
+
+int free_matrix(unsigned char ***, int);
+
+unsigned char **erode(unsigned char**, int, int, unsigned char**, int, int);
+
+unsigned char **dilate(unsigned char**, int, int, unsigned char**, int, int);
 
 #endif

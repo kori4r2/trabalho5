@@ -1272,8 +1272,9 @@ unsigned char **bits_to_matrix(unsigned char *bytes, int n_rows, int n_cols){
 		for(i = 0; i <= (n_rows*n_cols)/8; i++){
 			aux = (unsigned char)pow(2, 7);
 			for(j = 0; j < 8 && ((i*8)+j < n_rows*n_cols); j++){
-				matrix[k / n_cols][k % n_cols] = aux & bytes[i];
+				matrix[k / n_cols][k % n_cols] = (aux & bytes[i])/aux;
 				aux /= 2;
+				k++;
 			}
 		}
 
@@ -1282,20 +1283,115 @@ unsigned char **bits_to_matrix(unsigned char *bytes, int n_rows, int n_cols){
 	return NULL;
 }
 
-int erode(unsigned char *image, int n_rows, int n_cols, unsigned char *mask, int mask_rows, int mask_cols){
-	if(image != NULL && n_rows > 0 && n_cols > 0 && mask != NULL && mask_rows > 0 && mask_cols > 0){
-		
+int print_matrix(unsigned char **matrix, int rows, int cols){
+	if(matrix != NULL && rows > 0 && cols > 0){
+		int i, j;
+		for(i = 0; i < rows; i++){
+			for(j = 0; j < cols-1; j++){
+				printf("%hhu ", matrix[i][j]);
+			}
+			printf("%hhu\n", matrix[i][j]);
+		}
+	}
+	return 1;
+}
 
+int free_matrix(unsigned char ***matrix, int rows){
+	if(matrix != NULL && *matrix != NULL && rows > 0){
+		int i;
+		for(i = 0; i < rows; i++){
+			free((*matrix)[i]);
+		}
+		free(*matrix);
+		(*matrix) = NULL;
 		return 0;
 	}
 	return 1;
 }
 
-int dilate(unsigned char *image, int n_rows, int n_cols, unsigned char *mask, int mask_rows, int mask_cols){
-	if(image != NULL && n_rows > 0 && n_cols > 0 && mask != NULL && mask_rows > 0 && mask_cols > 0){
-		
+// modo 1 = erodir; modo 2 = dilatar;
+void mask_overlap(unsigned char **image, int row, int col, unsigned char **mask, int mask_rows, int mask_cols, int mode, unsigned char **out){
+	int i, j, result;
 
-		return 0;
+	result = 1;
+	for(i = row-(mask_rows/2); i <= row+(mask_rows/2); i++){
+		for(j = col-(mask_cols/2); j <= col+(mask_rows/2); j++){
+			switch(mode){
+				case 1:
+					// Se qualquer um deles for zero, result recebe 0
+					if(image[i][j] == 0 || mask[i-row+(mask_rows/2)][j-col+(mask_cols/2)] == 0) result = 0;
+					break;
+				case 2:
+					// Se a posicao atual e a posicao da mascara forem diferente de 0, muda a posicao da saida para 1
+					if(image[row][col] == 1 && mask[i-row+(mask_rows/2)][j-col+(mask_cols/2)] == 1) out[i][j] = 1;
+					break;
+			}
+		}
 	}
-	return 1;
+	// Caso esteja no modo erodir e nenhum caso cause result == 0, muda a posicao da saida para 1
+	if(mode == 1 && result) out[row][col] = 1;
+}
+
+unsigned char **erode(unsigned char **image, int n_rows, int n_cols, unsigned char **mask, int mask_rows, int mask_cols){
+	if(image != NULL && n_rows > 0 && n_cols > 0 && mask != NULL && mask_rows > 0 && mask_cols > 0){
+		int i, j;
+
+		// Cria a matriz com o resultado da operacao
+		unsigned char **result = (unsigned char**)malloc(sizeof(unsigned char*) * n_rows);
+		// Caso de erro em qualquer uma das alocacoes libera toda a memoria ja alocada e retorna NULL
+		if(result == NULL) return NULL;
+		for(i = 0; i < n_rows; i++){
+			result[i] = (unsigned char*)malloc(sizeof(char) * n_cols);
+			if(result[i] == NULL){
+				for(j = i-1; j >= 0; j--){
+					free(result[j]);
+					result[j] = NULL;
+				}
+				free(result);
+				return NULL;
+			// Caso a criacao seja bem sucedida inicia os valores da imagem
+			}else for(j = 0; j < n_cols; j++) result[i][j] = 0;
+		}
+
+		for(i = (mask_rows/2); i < n_rows-1-(mask_rows/2); i++){
+			for(j = (mask_cols/2); j < n_cols-1-(mask_cols/2); j++){
+				mask_overlap(image, i, j, mask, mask_rows, mask_cols, 1, result);
+			}
+		}
+
+		return result;
+	}
+	return NULL;
+}
+
+unsigned char **dilate(unsigned char **image, int n_rows, int n_cols, unsigned char **mask, int mask_rows, int mask_cols){
+	if(image != NULL && n_rows > 0 && n_cols > 0 && mask != NULL && mask_rows > 0 && mask_cols > 0){
+		int i, j;
+
+		// Cria a matriz com o resultado da operacao
+		unsigned char **result = (unsigned char**)malloc(sizeof(unsigned char*) * n_rows);
+		// Caso de erro em qualquer uma das alocacoes libera toda a memoria ja alocada e retorna NULL
+		if(result == NULL) return NULL;
+		for(i = 0; i < n_rows; i++){
+			result[i] = (unsigned char*)malloc(sizeof(char) * n_cols);
+			if(result[i] == NULL){
+				for(j = i-1; j >= 0; j--){
+					free(result[j]);
+					result[j] = NULL;
+				}
+				free(result);
+				return NULL;
+			// Caso a criacao seja bem sucedida inicia os valores da imagem
+			}else for(j = 0; j < n_cols; j++) result[i][j] = 0;
+		}
+
+		for(i = (mask_rows/2); i < n_rows-1-(mask_rows/2); i++){
+			for(j = (mask_cols/2); j < n_cols-1-(mask_cols/2); j++){
+				mask_overlap(image, i, j, mask, mask_rows, mask_cols, 2, result);
+			}
+		}
+
+		return result;
+	}
+	return NULL;
 }
