@@ -215,7 +215,7 @@ void get_item(char **item, SCHEMA *schema, int cur_pos, int*n_elements){
 			fread(&aux_double, node->size, 1, fp_data);
 			snprintf(item[i], LENGTH_ITEMS-1, "%.2lf", aux_double);
 		}else if(node->id == BYTE_T){
-			aux_byte = (unsigned char*)malloc(sizeof(unsigned char) * 5);
+			aux_byte = (unsigned char*)malloc(node->size);
 			fread(aux_byte, node->size, 1, fp_data);
 			print_byte(aux_byte, atoi(item[1]), atoi(item[2]), item[i]);
 			free(aux_byte);
@@ -710,7 +710,7 @@ void get_index(SCHEMA *schema){
 			fp_data = open_data(schema, "rb", &n_elements);
 
 			// A funcao copy_data_to_index() é utilizada para copiar a memoria diretamente de um arquivo para o outro
-			copy_data_to_index(fp_data, fp_index, schema, node, n_elements-1);
+			copy_data_to_index(fp_data, fp_index, schema, node, n_elements);
 
 			// E toda a memoria alocada é liberada
 			fclose(fp_data);
@@ -992,7 +992,7 @@ void dump_nn(SCHEMA *schema, int number){
 
 	i = 0;
 	do{
-		// Para encontrar a localização do elemento mais proximo, ja se sabe que o tamano da informacao salva é de double
+		// Para encontrar a localização do elemento mais proximo, ja se sabe que o tamanho da informacao salva é de double
 		fseek(fp_index, (i*(sizeof(double)+sizeof(long int))) + sizeof(double), SEEK_SET);
 		// Le a localização do elemento dentro do .data
 		fread(&location, sizeof(long int), 1, fp_index);
@@ -1032,7 +1032,8 @@ void save_temporary_input(SCHEMA *schema){
 	fclose(fp_temp);
 }
 
-void get_class(SCHEMA *schema, int n){
+// type = 1, normal; type = 2, ocr;
+void get_class(SCHEMA *schema, int n, int type){
 	/* n_elements guarda quantos elementos estao dentro do .data; n_classes armazena o numero de classes lidas quando necessario;
 	max_count, max_pos e draw ajudam a fazer a contagem de que classe aparece mais vezes; class armazena as informações do campo
 	correspondente a classe; classes found armazena ponteiros void* para as classes lidas enquanto a posicao correspondente em counter
@@ -1050,7 +1051,8 @@ void get_class(SCHEMA *schema, int n){
 	char *aux_string = NULL;
 
 	// Esse bloco de codigo garante que o arquivo index das distancias sera criado e atualizado antes de o abrir
-	update_distances(schema);
+	if(type == 1) update_distances(schema);
+	else if(type == 2) ocr_update_distances(schema);
 	get_index(schema);
 	sort_index(schema);
 	fp_index = open_index(schema, schema->sentry->previous, "rb", &i);
@@ -1184,6 +1186,101 @@ void get_class(SCHEMA *schema, int n){
 	fclose(fp_index);
 }
 
+void ocr_get_distance(FILE *fp_data, FILE *fp_temp, SCHEMA *schema, long int cur_offset){
+	int n_rows, n_cols;
+	double distance;
+	unsigned char *imageA, *imageB;
+	NODE *node = schema->sentry->next;
+
+	while(node != schema->sentry){
+		if(node->id == INT_T){
+			// Caso seja um inteiro e o numero de linhas ou numero de coluna, entao armazena na variavel correspondente
+			if(strcmp(node->name, "nrows") == 0){
+				fseek(fp_data, cur_offset+node->offset, SEEK_SET);
+				fread(&n_rows, node->size, 1, fp_data);
+			}else if(strcmp(node->name, "ncols") == 0){
+				fseek(fp_data, cur_offset+node->offset, SEEK_SET);
+				fread(&n_cols, node->size, 1, fp_data);
+			}
+		}
+		else if(node->id == BYTE_T){
+			imageA = (unsigned char*)malloc(node->size);
+			imageB = (unsigned char*)malloc(node->size);
+			// Caso seja os bytes correspondentes armazena o byte presente no .data
+			fseek(fp_data, cur_offset+node->offset, SEEK_SET);
+			fread(imageA, node->size, 1, fp_data);
+			// E o byte presente no .temp
+			fseek(fp_temp, node->offset, SEEK_SET);
+			fread(imageB, node->size, 1, fp_temp);
+		}
+		node = node->next;
+	}
+	// Calcula a distancia
+	distance = (double)hamming_distance(imageA, imageB, n_rows, n_cols);
+	// Node pega as caracteristicas da distancia
+	node = schema->sentry->previous;
+	// E escreve no .data a distancia calculada
+	fseek(fp_data, cur_offset+node->offset, SEEK_SET);
+	fwrite(&distance, node->size, 1, fp_data);
+
+	// libera a memoria alocada
+	if(imageA != NULL) free(imageA);
+	if(imageB != NULL) free(imageB);
+}
+
+void ocr_update_distances(SCHEMA *schema){
+	int i, n_elements;
+	FILE *fp_data = open_data(schema, "r+b", &n_elements);
+	FILE *fp_temp = open_temp(schema, "rb");
+
+	// Percorre os elementos do .data
+	for(i = 0; i < n_elements; i++){
+		// Chama get_distance passando o offset do elemento na i-esima posicao
+		ocr_get_distance(fp_data, fp_temp, schema, i*schema->size);
+	}
+
+	// Libera memoria alocada
+	fclose(fp_temp);
+	fclose(fp_data);
+}
+
+void ocr_save_temporary_input(SCHEMA *schema, unsigned char *imageA, int n_rows, int n_cols){
+	int i, int_aux;
+	void *aux;
+	double double_aux = 0;
+	NODE *node = schema->sentry;
+	FILE *fp_temp = open_temp(schema, "wb");
+	unsigned char *byte_aux;
+
+	// Para todos os elementos, menos os dois ultimos (classe e distancia) atribui os valores necessarios para analise ou um valor qualquer
+	for(i = 0; i < schema->n_elements-2; i++){
+		node = node->next;
+
+		if(node->id == INT_T){
+			if(strcmp(node->name, "nrows") == 0) int_aux = n_rows;
+			else if(strcmp(node->name, "ncols") == 0) int_aux = n_cols;
+			else int_aux = 0;
+			fwrite(&int_aux, node->size, 1, fp_temp);
+		}else if(node->id == DOUBLE_T){
+			fwrite(&double_aux, node->size, 1, fp_temp);
+		}else if(node->id == BYTE_T){
+			// Caso seja o tipo byte escreve o vetor passado, realocando-o para garantir que ocupe o mesmo espaço na memoria
+			byte_aux = (unsigned char*)malloc(node->size);
+			memset(byte_aux, 0, node->size);
+			memcpy(byte_aux, imageA, ((n_rows*n_cols)/8)*sizeof(unsigned char));
+			fwrite(byte_aux, node->size, 1, fp_temp);
+			free(byte_aux);
+		}else{
+			// Para qualquer outra opcao pode guardar lixo
+			aux = malloc(node->size);
+			memset(aux, 0, node->size);
+			fwrite(aux, node->size, 1, fp_temp);
+			free(aux);
+		}
+	}
+	fclose(fp_temp);
+}
+
 int print_byte(unsigned char *bytes, int rows, int cols, char *string){
 	if(bytes != NULL && rows > 0 && cols > 0 && string != NULL){
 		int i, j;
@@ -1283,6 +1380,36 @@ unsigned char **bits_to_matrix(unsigned char *bytes, int n_rows, int n_cols){
 	return NULL;
 }
 
+unsigned char *matrix_to_bits(unsigned char **matrix, int n_rows, int n_cols){
+	if(matrix != NULL && n_rows > 0 && n_cols > 0){
+		int i, j, k, value;
+		unsigned char aux;
+		// Aloca a memoria necessaria e inicializa os espaços como 0;
+		unsigned char *bytes = (unsigned char*)malloc(sizeof(unsigned char) * ((n_rows*n_cols/8) + 1) );
+		for(i = 0; i <= (n_rows*n_cols)/8; i++) bytes[i] = 0;
+
+		// Percorre a matriz
+		// k armazena a posicao do vetor bytes que esta sendo analisada
+		k = -1;
+		for(i = 0; i < n_rows; i++){
+			for(j = 0; j < n_cols; j++){
+				// Value equivale a qual bit esta sendo analisado
+				value = (i*n_cols)+j;
+				if(value%8 == 0){
+					k++;
+					aux = (unsigned char)pow(2, 7);
+				}
+				// O valor da posicao e incrementado em bytes
+				bytes[k] += matrix[i][j] * aux;
+				aux /= 2;
+			}
+		}
+
+		return bytes;
+	}
+	return NULL;
+}
+
 int print_matrix(unsigned char **matrix, int rows, int cols){
 	if(matrix != NULL && rows > 0 && cols > 0){
 		int i, j;
@@ -1318,8 +1445,8 @@ void mask_overlap(unsigned char **image, int row, int col, unsigned char **mask,
 		for(j = col-(mask_cols/2); j <= col+(mask_rows/2); j++){
 			switch(mode){
 				case 1:
-					// Se qualquer um deles for zero, result recebe 0
-					if(image[i][j] == 0 || mask[i-row+(mask_rows/2)][j-col+(mask_cols/2)] == 0) result = 0;
+					// Se os a mascara for um mas a imagem for 0, result recebe 0
+					if(image[i][j] == 0 &&  mask[i-row+(mask_rows/2)][j-col+(mask_cols/2)] == 1) result = 0;
 					break;
 				case 2:
 					// Se a posicao atual e a posicao da mascara forem diferente de 0, muda a posicao da saida para 1
@@ -1353,8 +1480,8 @@ unsigned char **erode(unsigned char **image, int n_rows, int n_cols, unsigned ch
 			}else for(j = 0; j < n_cols; j++) result[i][j] = 0;
 		}
 
-		for(i = (mask_rows/2); i < n_rows-1-(mask_rows/2); i++){
-			for(j = (mask_cols/2); j < n_cols-1-(mask_cols/2); j++){
+		for(i = (mask_rows/2); i <= n_rows-1-(mask_rows/2); i++){
+			for(j = (mask_cols/2); j <= n_cols-1-(mask_cols/2); j++){
 				mask_overlap(image, i, j, mask, mask_rows, mask_cols, 1, result);
 			}
 		}
@@ -1385,8 +1512,8 @@ unsigned char **dilate(unsigned char **image, int n_rows, int n_cols, unsigned c
 			}else for(j = 0; j < n_cols; j++) result[i][j] = 0;
 		}
 
-		for(i = (mask_rows/2); i < n_rows-1-(mask_rows/2); i++){
-			for(j = (mask_cols/2); j < n_cols-1-(mask_cols/2); j++){
+		for(i = (mask_rows/2); i <= n_rows-1-(mask_rows/2); i++){
+			for(j = (mask_cols/2); j <= n_cols-1-(mask_cols/2); j++){
 				mask_overlap(image, i, j, mask, mask_rows, mask_cols, 2, result);
 			}
 		}

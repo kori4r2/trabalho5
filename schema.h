@@ -8,7 +8,8 @@
 	para facilitar consulta
 	OBS2: As funcoes referentes ao trabalho 5 encontram-se no final do codigo. As funcoes anteriores de criacao
 	e leitura do schema (get_schema() e read_schema()) tiveram que ser alteradas para acomodar a possibilidade
-	de ser passado 'none' no lugar do nome do arquivo
+	de ser passado 'none' no lugar do nome do arquivo. As funcoes de leitura de itens e impressao de itens tambem
+	precisaram ser modificadas (terminam com _item).
 
 */
 #ifndef _SCHEMA
@@ -203,10 +204,16 @@ void dump_nn(SCHEMA*, int);
 	e o coloca no fim do arquivo .data com essa nova classe e distancia 0
         - Parametros
           SCHEMA* : schema dos dados
+	  int : numero de elementos a serem lidos
+	  int : tipo de distancia calculada
         - Retorno
           void
 */
-void get_class(SCHEMA*, int);
+void get_class(SCHEMA*, int, int);
+
+void ocr_update_distances(SCHEMA*);
+
+void ocr_save_temporary_input(SCHEMA*, unsigned char*, int, int);
 
 unsigned char *read_image(int, int);
 
@@ -215,6 +222,8 @@ int print_byte(unsigned char*, int, int, char*);
 int hamming_distance(unsigned char*, unsigned char*, int, int);
 
 unsigned char **bits_to_matrix(unsigned char*, int, int);
+
+unsigned char *matrix_to_bits(unsigned char**, int, int);
 
 int print_matrix(unsigned char**, int, int);
 

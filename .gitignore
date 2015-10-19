@@ -1,6 +1,7 @@
 *.schema
 *.data
 *.temp
+*.idx
 *.in
 *.out
 *.in~
