@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "schema.h"
+#include "my_strings.h"
 
 // Funcao que le uma imagem, uma mascara e o nome de uma operacao da stdin e realiza a operacao desejada, imprimindo o resultado se assim se desejar
 // e retornando a matriz resultante;
@@ -137,27 +138,33 @@ int main(int argc, char *argv[]){
 
 			free_matrix(&matrix, n_rowsA);
 		}else if(strcmp(input, "ocr_dump_nn") == 0){
+			// Realiza a operacao desejada imprimindo o resultado
 			matrix = mem_op(&repeat, 1, &n_rowsA, &n_colsA);
 			printf("out:\n");
 			print_matrix(matrix, n_rowsA, n_colsA);
+			// Salva a entrada no arquivo .temp
 			imageA = matrix_to_bits(matrix, n_rowsA, n_colsA);
 			ocr_save_temporary_input(schema, imageA, n_rowsA, n_colsA);
+			// Atualiza as distancias
 			ocr_update_distances(schema);
 			get_index(schema);
 			sort_index(schema);
+			// E realiza o dump_nn
 			scanf("%d", &n);
 			dump_nn(schema, n);
-
+			// Libera a memoria alocada
 			free_matrix(&matrix, n_rowsA);
 			free(imageA);
 		}else if(strcmp(input, "ocr_knn") == 0){
+			// Realiza a operacao desejada sem imprimir o resultado
 			matrix = mem_op(&repeat, 0, &n_rowsA, &n_colsA);
+			// Salva a entrada no arquivo .temp
 			imageA = matrix_to_bits(matrix, n_rowsA, n_colsA);
 			ocr_save_temporary_input(schema, imageA, n_rowsA, n_colsA);
-
+			// Analisa qual a classe do novo elemento baseando-se nas distancias
 			scanf("%d", &n);
 			get_class(schema, n, 2);
-
+			// Libera memoria alocada
 			free_matrix(&matrix, n_rowsA);
 			free(imageA);
 		}else if(strcmp(input, "exit") == 0){

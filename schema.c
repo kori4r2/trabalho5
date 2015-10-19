@@ -72,6 +72,7 @@ void get_node(NODE *node, char *line){
 		// O numero de caracteres fica salvo no tamanho do elemento, pois sempre um produto do tamanho por sizeof(char)
 		node->size = atoi(aux) * sizeof(char);
 	}else if(strcmp(aux, STR_BYTE) == 0){
+		// Caso seja um byte, faz a leitura de maneira semelhando a char[*]
 		node->id = BYTE_T;
 		aux = strtok(NULL, DELIMITERS);
 		node->size = atoi(aux) * sizeof(unsigned char);
@@ -215,8 +216,10 @@ void get_item(char **item, SCHEMA *schema, int cur_pos, int*n_elements){
 			fread(&aux_double, node->size, 1, fp_data);
 			snprintf(item[i], LENGTH_ITEMS-1, "%.2lf", aux_double);
 		}else if(node->id == BYTE_T){
+			// Para elementos do tipo byte le-se o vetor da memoria
 			aux_byte = (unsigned char*)malloc(node->size);
 			fread(aux_byte, node->size, 1, fp_data);
+			// E a funcao print_byte e usada para armazenar o conteudo na string
 			print_byte(aux_byte, atoi(item[1]), atoi(item[2]), item[i]);
 			free(aux_byte);
 		}
@@ -652,7 +655,7 @@ void dump_data(SCHEMA *schema){
 		}else if(node->id == STRING_T){
 			item[i] = (char*)malloc(node->size);
 		}else if(node->id == BYTE_T){
-			item[i] = (char*)malloc(node->size * 8);
+			item[i] = (char*)malloc((node->size * 8)+1);
 		}
 	}
 
@@ -721,7 +724,7 @@ void get_index(SCHEMA *schema){
 
 void print_index(SCHEMA *schema){
 
-	int i, j, n_elements;
+	int i, j, k, n_elements;
 	long int location;
 	void *aux;
 	NODE *node = schema->sentry;
@@ -749,6 +752,11 @@ void print_index(SCHEMA *schema){
 					printf("%.2lf = %ld\n", *((double*)aux), location);
 				}else if(node->id == STRING_T){
 					printf("%s = %ld\n", (char*)aux, location);
+				}else if(node->id == BYTE_T){
+					for(k = 1; k < node->size/sizeof(unsigned char); k++){
+						printf("%hhu, ", ((unsigned char*)aux)[k]);
+					}
+					printf("%hhu = %ld\n", ((unsigned char*)aux)[k], location);
 				}
 				// A memoria alocada é liberada a medida que é necessario
 				free(aux);
@@ -794,7 +802,8 @@ void sort_index(SCHEMA *schema){
 
 void insert_data(SCHEMA *schema){
 
-	int i, n_elements_data;
+	int i, n_elements_data, n_rows, n_cols;
+	unsigned char *image;
 	double dist = 0;
 	void *aux = NULL;
 	NODE *node = schema->sentry;
@@ -812,12 +821,18 @@ void insert_data(SCHEMA *schema){
 		// De acordo com o tipo sendo analisado, as informações são lidas da stdin e armazendas em aux
 		if(node->id == INT_T){
 			scanf("%d", (int*)aux);
+			if(strcmp(node->name, "nrows") == 0) n_rows = *((int*)aux);
+			else if(strcmp(node->name, "ncols") == 0) n_cols = *((int*)aux);
 		}else if(node->id == DOUBLE_T){
 			scanf("%lf", (double*)aux);
 		}else if(node->id == STRING_T){
 			free(aux);
 			aux = (void*)my_gets(stdin, (node->size/sizeof(char)));
 			if(aux == NULL) fprintf(stderr, "error reading string\n");
+		}else if(node->id == BYTE_T){
+			image = read_image(n_rows, n_cols);
+			memcpy(aux, image, ((n_rows*n_cols/8)+1)*sizeof(unsigned char));
+			free(image);
 		}
 		// As informacoes sao entao escritas no final do arquivo .data
 		fwrite(aux, node->size, 1, fp_data);
@@ -891,6 +906,8 @@ void search_index_data(SCHEMA *schema){
 					printf("%.2lf\n", *((double*)aux));
 				}else if(node->id == STRING_T){
 					printf("%s\n", (char*)aux);
+				}else if(node->id == BYTE_T){
+					for(j = 0; j < node->size/sizeof(unsigned char); j++) printf("%hhu\n", ((unsigned char*)aux)[j]);
 				}
 				// E a memoria alocada é liberada
 				free(aux);
@@ -1286,10 +1303,15 @@ int print_byte(unsigned char *bytes, int rows, int cols, char *string){
 		int i, j;
 		unsigned char aux;
 
+		// O valor de i corresponte a posicao do byte sendo analisado
 		for(i = 0; i <= (rows*cols)/8; i++){
+			// A cada vez que mudar para o byte seguinte, aux volta para o bit mais significativo
 			aux = (unsigned char)pow(2, 7);
+			// j corresponde ao bit sendo analisado
 			for(j = 0; j < 8 && ((i*8)+j < rows*cols); j++){
+				// Imprime na posicao correspondente da string o numero lido
 				sprintf(string+((i*8)+j), "%hhu", (aux & bytes[i])/aux);
+				// Aux e dividido por dois para pegar o bit seguinte quando for usando o and binario (&)
 				aux /= 2;
 			}
 		}
@@ -1333,11 +1355,16 @@ unsigned char *read_image(int n_rows, int n_cols){
 
 int hamming_distance(unsigned char *imageA, unsigned char *imageB, int n_rows, int n_cols){
 	if(imageA != NULL && imageB != NULL && n_rows > 0 && n_cols > 0){
+		// A distancia e inicializada como 0
 		int i, j, distance = 0;
 		unsigned char aux;
+		// i armazena o byte sendo lido
 		for(i = 0; i <= (n_rows*n_cols)/8; i++){
+			// Valor inicial de aux
 			aux = (unsigned char)pow(2, 7);
+			// j armazena o bit sendo lido
 			for(j = 0; j < 8 && ((i*8)+j < n_rows*n_cols); j++){
+				// Caso o bit seja diferente, incrementa a distancia
 				if((aux & imageA[i]) != (aux & imageB[i])) distance++;
 				aux /= 2;
 			}
@@ -1348,14 +1375,18 @@ int hamming_distance(unsigned char *imageA, unsigned char *imageB, int n_rows, i
 }
 
 unsigned char **bits_to_matrix(unsigned char *bytes, int n_rows, int n_cols){
+	// Analisa se os parametros passados foram validos
 	if(bytes != NULL && n_rows > 0 && n_cols > 0){
 		int i, j, k;
 		unsigned char aux, **matrix;
 
+		// Cria a matriz
 		matrix = (unsigned char**)malloc(sizeof(unsigned char*) * n_rows);
+		// E caso seja encontrado qualquer erro durante as alocacoes de memoria
 		if(matrix == NULL) return NULL;
 		for(i = 0; i < n_rows; i++){
 			matrix[i] = (unsigned char*)malloc(sizeof(unsigned char) * n_cols);
+			// Apaga tudo o que ja foi criado e retorna NULL
 			if(matrix[i] == NULL){
 				for(j = i-1; j >= 0; j--){
 					free(matrix[j]);
@@ -1366,16 +1397,22 @@ unsigned char **bits_to_matrix(unsigned char *bytes, int n_rows, int n_cols){
 			}
 		}
 
+		// k coresponde a quantos bits foram lidos
 		k = 0;
+		// i corresponde ao byte sendo analisado
 		for(i = 0; i <= (n_rows*n_cols)/8; i++){
+			// Inicializa aux
 			aux = (unsigned char)pow(2, 7);
+			// j corresponde ao bit
 			for(j = 0; j < 8 && ((i*8)+j < n_rows*n_cols); j++){
+				// k/n_cols corresponde a linha que o bit deve ocupar na matriz e k%c_cols corresponde a coluna
 				matrix[k / n_cols][k % n_cols] = (aux & bytes[i])/aux;
+				// Divide aux e incrementa k
 				aux /= 2;
 				k++;
 			}
 		}
-
+		// Retorna a matrix criada
 		return matrix;
 	}
 	return NULL;
@@ -1412,12 +1449,15 @@ unsigned char *matrix_to_bits(unsigned char **matrix, int n_rows, int n_cols){
 }
 
 int print_matrix(unsigned char **matrix, int rows, int cols){
+	// Checa se os parametros passados sao validos
 	if(matrix != NULL && rows > 0 && cols > 0){
 		int i, j;
+		// Percorre a matriz imprimindo os elementos com um espaço entre eles
 		for(i = 0; i < rows; i++){
 			for(j = 0; j < cols-1; j++){
 				printf("%hhu ", matrix[i][j]);
 			}
+			// E uma quebra de linha a cada linha da matriz
 			printf("%hhu\n", matrix[i][j]);
 		}
 		return 0;
@@ -1426,11 +1466,14 @@ int print_matrix(unsigned char **matrix, int rows, int cols){
 }
 
 int free_matrix(unsigned char ***matrix, int rows){
+	// Checa se os parametros sao validos para deletar
 	if(matrix != NULL && *matrix != NULL && rows > 0){
 		int i;
+		// Se sim, libera todas as linhas
 		for(i = 0; i < rows; i++){
 			free((*matrix)[i]);
 		}
+		// Depois libera a matriz e seta NULL na variavel
 		free(*matrix);
 		(*matrix) = NULL;
 		return 0;
@@ -1442,9 +1485,13 @@ int free_matrix(unsigned char ***matrix, int rows){
 void mask_overlap(unsigned char **image, int row, int col, unsigned char **mask, int mask_rows, int mask_cols, int mode, unsigned char **out){
 	int i, j, result;
 
+	// Result e inicializado como 1
 	result = 1;
+	// Os valores iniciais e finais dos loops sao adaptados para evitar que a comparacao das mascaras tente acessar posicao fora
+	// da imagem original
 	for(i = row-(mask_rows/2); i <= row+(mask_rows/2); i++){
 		for(j = col-(mask_cols/2); j <= col+(mask_rows/2); j++){
+			// Analisa qual o modo de operacao a ser usado
 			switch(mode){
 				case 1:
 					// Se os a mascara for um mas a imagem for 0, result recebe 0
@@ -1457,7 +1504,7 @@ void mask_overlap(unsigned char **image, int row, int col, unsigned char **mask,
 			}
 		}
 	}
-	// Caso esteja no modo erodir e nenhum caso cause result == 0, muda a posicao da saida para 1
+	// Caso esteja no modo erodir e nenhum caso cause result = 0, muda a posicao da saida para 1
 	if(mode == 1 && result) out[row][col] = 1;
 }
 
@@ -1482,6 +1529,7 @@ unsigned char **erode(unsigned char **image, int n_rows, int n_cols, unsigned ch
 			}else for(j = 0; j < n_cols; j++) result[i][j] = 0;
 		}
 
+		// Percorre a matriz com a mascara realizando a operacao desejada
 		for(i = (mask_rows/2); i <= n_rows-1-(mask_rows/2); i++){
 			for(j = (mask_cols/2); j <= n_cols-1-(mask_cols/2); j++){
 				mask_overlap(image, i, j, mask, mask_rows, mask_cols, 1, result);
@@ -1514,6 +1562,7 @@ unsigned char **dilate(unsigned char **image, int n_rows, int n_cols, unsigned c
 			}else for(j = 0; j < n_cols; j++) result[i][j] = 0;
 		}
 
+		// Percorre a matriz com a mascara realizando a operacao desejada
 		for(i = (mask_rows/2); i <= n_rows-1-(mask_rows/2); i++){
 			for(j = (mask_cols/2); j <= n_cols-1-(mask_cols/2); j++){
 				mask_overlap(image, i, j, mask, mask_rows, mask_cols, 2, result);

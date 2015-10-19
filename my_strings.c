@@ -105,8 +105,9 @@ char *my_gets(FILE *stream, int str_size){
 	}while( ((char)input == ' ' || (char)input == '\n') && input != EOF);
 	// Caso atinja o fim do arquivo nessa busca, encerra o programa com mensagem de erro
 	if(input == EOF){
-		fprintf(stderr, "error reading string");
-		exit(4);
+		fprintf(stderr, "error reading string\n");
+		free(string);
+		return NULL;
 	}
 
 	// Le no maximo str_size caracteres da stream, parando caso encontre uma quebra de linha ou fim de arquivo
@@ -155,6 +156,7 @@ char **get_string_list(FILE *stream, int *tam, int mode){
 
 	(*tam) = size;
 	return list;
+
 }
 
 void free_string_list(char **string_list, int size){
